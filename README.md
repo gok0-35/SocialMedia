@@ -16,7 +16,7 @@ repo kökünde:
 git checkout main
 git pull
 git checkout -b step/01-models
-dotnet add SocialMedia.Api package Microsoft.AspNetCore.Identity
+dotnet add SocialMedia.Api package Microsoft.AspNetCore.Identity --version 8.0.10
 
 #Kodla 
 dotnet build

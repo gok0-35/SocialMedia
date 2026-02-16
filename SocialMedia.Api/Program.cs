@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using SocialMedia.Api.Domain.Entities;
+using SocialMedia.Api.Infrastructure.Auth;
 using SocialMedia.Api.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,8 +43,14 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+string? defaultConnection = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(defaultConnection))
+{
+    throw new InvalidOperationException("Missing configuration: ConnectionStrings:DefaultConnection");
+}
+
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    opt.UseNpgsql(defaultConnection));
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
 {
@@ -56,10 +63,10 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddSignInManager();
 
-string jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
-string jwtAudience = builder.Configuration["Jwt:Audience"]!;
-string jwtKey = builder.Configuration["Jwt:Key"]!;
-byte[] jwtKeyBytes = Encoding.UTF8.GetBytes(jwtKey);
+JwtSettings jwtSettings = JwtSettings.FromConfiguration(builder.Configuration);
+builder.Services.AddSingleton(jwtSettings);
+
+byte[] jwtKeyBytes = Encoding.UTF8.GetBytes(jwtSettings.Key);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -67,10 +74,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidIssuer = jwtIssuer,
+            ValidIssuer = jwtSettings.Issuer,
 
             ValidateAudience = true,
-            ValidAudience = jwtAudience,
+            ValidAudience = jwtSettings.Audience,
 
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(jwtKeyBytes),
@@ -93,6 +100,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

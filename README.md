@@ -156,7 +156,7 @@ Not: Email onaylamadan `login` denersen `401` dönmesi beklenir.
 
 ---
 
-## 5) Commit (push/merge kontrol sonrası)
+## 5) Commit 
 
 Repo kökünde:
 

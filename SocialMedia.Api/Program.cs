@@ -6,7 +6,13 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using SocialMedia.Api.Domain.Entities;
 using SocialMedia.Api.Infrastructure.Auth;
+using SocialMedia.Api.Infrastructure.Configuration;
+using SocialMedia.Api.Infrastructure.Email;
 using SocialMedia.Api.Infrastructure.Persistence;
+
+DotEnvLoader.Load(
+    Path.Combine(Directory.GetCurrentDirectory(), ".env"),
+    Path.Combine(Directory.GetCurrentDirectory(), "..", ".env"));
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -59,14 +65,21 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     options.Password.RequireLowercase = false;
     options.Password.RequireUppercase = false;
     options.Password.RequireNonAlphanumeric = false;
+    options.User.RequireUniqueEmail = true;
+    options.SignIn.RequireConfirmedEmail = true;
 })
 .AddEntityFrameworkStores<AppDbContext>()
-.AddSignInManager();
+.AddSignInManager()
+.AddDefaultTokenProviders();
 
 JwtSettings jwtSettings = JwtSettings.FromConfiguration(builder.Configuration);
 builder.Services.AddSingleton(jwtSettings);
 
 byte[] jwtKeyBytes = Encoding.UTF8.GetBytes(jwtSettings.Key);
+
+EmailSettings emailSettings = EmailSettings.FromConfiguration(builder.Configuration);
+builder.Services.AddSingleton(emailSettings);
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

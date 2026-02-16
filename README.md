@@ -1,16 +1,21 @@
-## Step 04 — Authentication Pipeline + Config Guard
+## Step 05 — Email Login + Email Confirmation + Password Recovery + Secret Management (.env)
 
 Bu adımda:
 
-- `app.UseAuthentication()` middleware eklendi
-- `app.UseAuthorization()` sırası authentication sonrası olacak şekilde düzeltildi
-- JWT ayarları için `JwtSettings` sınıfı eklendi
-- Startup sırasında config guard eklendi:
-  - `ConnectionStrings:DefaultConnection` boş olamaz
-  - `Jwt:Issuer`, `Jwt:Audience`, `Jwt:Key` zorunlu
-  - `Jwt:Key` en az 32 karakter olmalı
-  - `Jwt:ExpiresMinutes` pozitif integer olmalı
-- `AuthController`, `IConfiguration` yerine `JwtSettings` kullanacak şekilde güncellendi
+- Login `username` yerine `email` ile çalışır
+- Email onaylanmadan login engellenir
+- Register sonrası email onay linki gönderilir
+- `confirm-email` endpointi eklendi
+- `resend-confirmation-email` endpointi eklendi
+- `forgot-password` endpointi eklendi (mail ile reset token gönderir)
+- `reset-password` endpointi eklendi
+- SMTP mail altyapısı eklendi (`IEmailSender`, `SmtpEmailSender`, `EmailSettings`)
+- Hassas yapılandırmalar (`ConnectionStrings`, `Jwt`, `Email`) tek noktada yönetim için `.env` dosyasında toplandı
+- Uygulama başlangıcında `.env` yükleme eklendi (`DotEnvLoader`)
+- Identity ayarları güncellendi:
+  - `RequireUniqueEmail = true`
+  - `RequireConfirmedEmail = true`
+  - `AddDefaultTokenProviders()`
 
 ---
 
@@ -21,41 +26,12 @@ Repo kökünde:
 ```bash
 git checkout main
 git pull
-git checkout -b step/04-auth-middleware-config-guard
+git checkout -b step/05-email-auth-recovery
 ```
 
 ---
 
-## 2) Kod değişiklikleri
-
-### Eklenen dosya
-
-```text
-SocialMedia.Api/Infrastructure/Auth/JwtSettings.cs
-```
-
-### Güncellenen dosyalar
-
-```text
-SocialMedia.Api/Program.cs
-SocialMedia.Api/Controllers/AuthController.cs
-```
-
----
-
-## 3) Build kontrolü
-
-Repo kökünde:
-
-```bash
-dotnet build
-```
-
-Beklenen: `0 Error`
-
----
-
-## 4) Uygulamayı çalıştır
+## 2) Çalıştırma
 
 ```bash
 docker compose up -d
@@ -65,53 +41,126 @@ dotnet watch run --urls "http://localhost:5000"
 
 ---
 
-## 5) Terminalden endpoint testi
+## 3) Endpoint test akışı
 
 Farklı bir terminal aç:
 
-### Register
+### 3.1 Register
 
 ```bash
 curl -X POST "http://localhost:5000/api/auth/register" \
   -H "Content-Type: application/json" \
-  -d '{"userName":"LeBron","password":"12345678"}'
+  -d '{"userName":"LeBron","email":"lebron@example.com","password":"12345678"}'
 ```
 
-### Login
+Beklenen: kayıt başarılı mesajı + mail kutusuna onay maili.
+
+### 3.2 Confirm email
+
+Mailden gelen linki aç veya doğrudan:
+
+```bash
+curl "http://localhost:5000/api/auth/confirm-email?userId=USER_ID&token=TOKEN"
+```
+
+### 3.3 Login (email ile)
 
 ```bash
 curl -X POST "http://localhost:5000/api/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"userName":"LeBron","password":"12345678"}'
+  -d '{"email":"lebron@example.com","password":"12345678"}'
 ```
 
-Login response içinden `token` değerini al.
-
-### Protected endpoint (`/api/me`)
+### 3.4 Forgot password
 
 ```bash
-curl "http://localhost:5000/api/me" \
-  -H "Authorization: Bearer TOKEN_BURAYA"
+curl -X POST "http://localhost:5000/api/auth/forgot-password" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"lebron@example.com"}'
 ```
 
-Beklenen:
+Mailden gelen reset token'ı al.
 
-- 200 -> token doğrulandı
-- 401 -> token/header hatalı veya yok
+### 3.5 Reset password
+
+```bash
+curl -X POST "http://localhost:5000/api/auth/reset-password" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"lebron@example.com","token":"TOKEN","newPassword":"87654321"}'
+```
+
+### 3.6 Resend confirmation mail
+
+```bash
+curl -X POST "http://localhost:5000/api/auth/resend-confirmation-email" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"lebron@example.com"}'
+```
 
 ---
 
-## 6) Commit + merge
+## 4) Swagger'da adım adım ne yapmalıyım?
+
+1. Uygulamayı çalıştır:
+
+```bash
+docker compose up -d
+cd SocialMedia.Api
+dotnet watch run --urls "http://localhost:5000"
+```
+
+2. Swagger aç:
+
+```text
+http://localhost:5000/swagger
+```
+
+3. `POST /api/auth/register` çağır:
+
+```json
+{
+  "userName": "LeBron",
+  "email": "lebron@example.com",
+  "password": "12345678"
+}
+```
+
+4. Mail kutusuna gelen onay linkine tıkla (veya `GET /api/auth/confirm-email` endpointini `userId` + `token` ile çağır).
+
+5. `POST /api/auth/login` çağır:
+
+```json
+{
+  "email": "lebron@example.com",
+  "password": "12345678"
+}
+```
+
+6. Dönen `token` değerini kopyala, Swagger'da sağ üstte `Authorize` butonuna basıp aşağıdaki formatla gir:
+
+```text
+Bearer TOKEN_BURAYA
+```
+
+7. Token ile korunan endpoint'i test et:
+
+```text
+GET /api/me
+```
+
+8. Şifre unutma akışı için:
+- `POST /api/auth/forgot-password` çağır
+- Mailden gelen token ile `POST /api/auth/reset-password` çağır
+
+Not: Email onaylamadan `login` denersen `401` dönmesi beklenir.
+
+---
+
+## 5) Commit (push/merge kontrol sonrası)
 
 Repo kökünde:
 
 ```bash
 git add .
-git commit -m "step 04: add authentication middleware and config guard"
-
-git checkout main
-git merge --no-ff step/04-auth-middleware-config-guard -m "merge: step 04 auth middleware + config guard"
-
-git push
-git push -u origin step/04-auth-middleware-config-guard
+git commit -m "step 05: email login + confirmation + forgot/reset password"
 ```

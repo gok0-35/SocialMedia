@@ -1,133 +1,117 @@
-## Step 03 — JWT Authentication (Register / Login)
+## Step 04 — Authentication Pipeline + Config Guard
 
 Bu adımda:
 
-- JWT authentication altyapısı kurduk
-- Identity + SignInManager ile login sistemi ekledik
-- Register / Login endpoint yazıldı
-- JWT token üretimi eklendi
-- Protected endpoint ile auth test edildi (`/api/me`)
-- Artık kullanıcılar token ile doğrulanıyor
+- `app.UseAuthentication()` middleware eklendi
+- `app.UseAuthorization()` sırası authentication sonrası olacak şekilde düzeltildi
+- JWT ayarları için `JwtSettings` sınıfı eklendi
+- Startup sırasında config guard eklendi:
+  - `ConnectionStrings:DefaultConnection` boş olamaz
+  - `Jwt:Issuer`, `Jwt:Audience`, `Jwt:Key` zorunlu
+  - `Jwt:Key` en az 32 karakter olmalı
+  - `Jwt:ExpiresMinutes` pozitif integer olmalı
+- `AuthController`, `IConfiguration` yerine `JwtSettings` kullanacak şekilde güncellendi
 
 ---
 
-## Terminal adımları
+## 1) Branch oluştur
 
-repo kökünde:
+Repo kökünde:
 
 ```bash
 git checkout main
 git pull
-git checkout -b step/03-jwt-auth
+git checkout -b step/04-auth-middleware-config-guard
+```
 
-dotnet add SocialMedia.Api package Microsoft.AspNetCore.Authentication.JwtBearer --version 8.0.10
+---
 
+## 2) Kod değişiklikleri
+
+### Eklenen dosya
+
+```text
+SocialMedia.Api/Infrastructure/Auth/JwtSettings.cs
+```
+
+### Güncellenen dosyalar
+
+```text
+SocialMedia.Api/Program.cs
+SocialMedia.Api/Controllers/AuthController.cs
+```
+
+---
+
+## 3) Build kontrolü
+
+Repo kökünde:
+
+```bash
 dotnet build
-# Hata yoksa devam
 ```
+
+Beklenen: `0 Error`
 
 ---
 
-## JWT config
-
-`SocialMedia.Api/appsettings.Development.json`
-
-```json
-"Jwt": {
-  "Issuer": "SocialMedia.Api",
-  "Audience": "SocialMedia.Client",
-  "Key": "En az 32 karakter rastgele döşe",
-  "ExpiresMinutes": 60
-}
-```
----
-
-## Eklenen dosyalar
-
-```
-Controllers/AuthController.cs
-Controllers/MeController.cs
-```
-
-### AuthController
-
-- POST `/api/auth/register`
-- POST `/api/auth/login`
-
-Kullanıcı oluşturur ve JWT token döner.
-
-### MeController
-
-- GET `/api/me`
-- `[Authorize]` ile korunur
-- JWT çalışıyor mu test etmek için vardır
-
----
-
-## Çalıştırma
-
-repo kökünde:
+## 4) Uygulamayı çalıştır
 
 ```bash
 docker compose up -d
 cd SocialMedia.Api
-dotnet watch
+dotnet watch run --urls "http://localhost:5000"
 ```
+
 ---
 
-## Test akışı
+## 5) Terminalden endpoint testi
+
+Farklı bir terminal aç:
 
 ### Register
 
-POST `/api/auth/register`
-
-```json
-{
-  "userName": "LeBron",
-  "password": "12345678"
-}
+```bash
+curl -X POST "http://localhost:5000/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"userName":"LeBron","password":"12345678"}'
 ```
-
----
 
 ### Login
 
-POST `/api/auth/login`
+```bash
+curl -X POST "http://localhost:5000/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"userName":"LeBron","password":"12345678"}'
+```
 
-aynı body
+Login response içinden `token` değerini al.
+
+### Protected endpoint (`/api/me`)
+
+```bash
+curl "http://localhost:5000/api/me" \
+  -H "Authorization: Bearer TOKEN_BURAYA"
+```
+
+Beklenen:
+
+- 200 -> token doğrulandı
+- 401 -> token/header hatalı veya yok
 
 ---
 
-### Protected endpoint test
-
-Header:
-
-```
-Authorization: Bearer (Verilen Token) 
-```
-
-GET:
-
-```
-/api/me
-```
-
-- 200 → JWT çalışıyor
-- 401 → header gitmiyor
-
----
-
-## Terminal adımları 
+## 6) Commit + merge
 
 Repo kökünde:
 
 ```bash
 git add .
-git commit -m "step 03: add jwt authentication (register/login)"
+git commit -m "step 04: add authentication middleware and config guard"
 
 git checkout main
-git merge --no-ff step/03-jwt-auth -m "merge: step 03 jwt auth"
+git merge --no-ff step/04-auth-middleware-config-guard -m "merge: step 04 auth middleware + config guard"
 
 git push
-git push -u origin step/03-jwt-auth
+git push -u origin step/04-auth-middleware-config-guard
 ```

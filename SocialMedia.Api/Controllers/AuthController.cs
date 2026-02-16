@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using SocialMedia.Api.Domain.Entities;
+using SocialMedia.Api.Infrastructure.Auth;
 
 namespace SocialMedia.Api.Controllers;
 
@@ -14,16 +15,16 @@ public class AuthController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
-    private readonly IConfiguration _configuration;
+    private readonly JwtSettings _jwtSettings;
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        IConfiguration configuration)
+        JwtSettings jwtSettings)
     {
         _userManager = userManager;
         _signInManager = signInManager;
-        _configuration = configuration;
+        _jwtSettings = jwtSettings;
     }
 
     public class RegisterRequest
@@ -96,25 +97,20 @@ public class AuthController : ControllerBase
 
     private AuthResponse CreateToken(ApplicationUser user)
     {
-        string issuer = _configuration["Jwt:Issuer"]!;
-        string audience = _configuration["Jwt:Audience"]!;
-        string key = _configuration["Jwt:Key"]!;
-        int expiresMinutes = int.Parse(_configuration["Jwt:ExpiresMinutes"]!);
-
-        DateTimeOffset expiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(expiresMinutes);
+        DateTimeOffset expiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(_jwtSettings.ExpiresMinutes);
 
         List<Claim> claims = new List<Claim>();
         claims.Add(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
         claims.Add(new Claim(ClaimTypes.Name, user.UserName ?? string.Empty));
 
-        byte[] keyBytes = Encoding.UTF8.GetBytes(key);
+        byte[] keyBytes = Encoding.UTF8.GetBytes(_jwtSettings.Key);
         SymmetricSecurityKey securityKey = new SymmetricSecurityKey(keyBytes);
 
         SigningCredentials credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
         JwtSecurityToken token = new JwtSecurityToken(
-            issuer: issuer,
-            audience: audience,
+            issuer: _jwtSettings.Issuer,
+            audience: _jwtSettings.Audience,
             claims: claims,
             notBefore: DateTime.UtcNow,
             expires: expiresAtUtc.UtcDateTime,

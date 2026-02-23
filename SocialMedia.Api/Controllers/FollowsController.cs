@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SocialMedia.Api.Application.Dtos.Common;
+using SocialMedia.Api.Application.Dtos.Follows;
 using SocialMedia.Api.Domain.Entities;
 using SocialMedia.Api.Infrastructure.Persistence;
 
@@ -16,13 +18,6 @@ public class FollowsController : ControllerBase
     public FollowsController(AppDbContext dbContext)
     {
         _dbContext = dbContext;
-    }
-
-    public class FollowUserResponse
-    {
-        public Guid UserId { get; set; }
-        public string UserName { get; set; } = string.Empty;
-        public DateTimeOffset FollowedAtUtc { get; set; }
     }
 
     [Authorize]
@@ -48,7 +43,10 @@ public class FollowsController : ControllerBase
         Follow? existingFollow = await _dbContext.Follows.FindAsync(currentUserId, followingUserId);
         if (existingFollow != null)
         {
-            return Ok(new { message = "Kullanıcı zaten takip ediliyor." });
+            return Ok(new MessageReadDto
+            {
+                Message = "Kullanıcı zaten takip ediliyor."
+            });
         }
 
         _dbContext.Follows.Add(new Follow
@@ -59,7 +57,10 @@ public class FollowsController : ControllerBase
 
         await _dbContext.SaveChangesAsync();
 
-        return Ok(new { message = "Kullanıcı takip edildi." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Kullanıcı takip edildi."
+        });
     }
 
     [Authorize]
@@ -74,13 +75,19 @@ public class FollowsController : ControllerBase
         Follow? existingFollow = await _dbContext.Follows.FindAsync(currentUserId, followingUserId);
         if (existingFollow == null)
         {
-            return Ok(new { message = "Kullanıcı zaten takip edilmiyor." });
+            return Ok(new MessageReadDto
+            {
+                Message = "Kullanıcı zaten takip edilmiyor."
+            });
         }
 
         _dbContext.Follows.Remove(existingFollow);
         await _dbContext.SaveChangesAsync();
 
-        return Ok(new { message = "Takip bırakıldı." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Takip bırakıldı."
+        });
     }
 
     [HttpGet("{userId:guid}/followers")]
@@ -99,13 +106,13 @@ public class FollowsController : ControllerBase
 
         int totalCount = await _dbContext.Follows.CountAsync(x => x.FollowingId == userId);
 
-        List<FollowUserResponse> followers = await _dbContext.Follows
+        List<FollowUserReadDto> followers = await _dbContext.Follows
             .AsNoTracking()
             .Where(x => x.FollowingId == userId)
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
-            .Select(x => new FollowUserResponse
+            .Select(x => new FollowUserReadDto
             {
                 UserId = x.FollowerId,
                 UserName = x.Follower.UserName ?? string.Empty,
@@ -113,11 +120,11 @@ public class FollowsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new
+        return Ok(new FollowListReadDto
         {
-            userId,
-            totalCount,
-            items = followers
+            UserId = userId,
+            TotalCount = totalCount,
+            Items = followers
         });
     }
 
@@ -137,13 +144,13 @@ public class FollowsController : ControllerBase
 
         int totalCount = await _dbContext.Follows.CountAsync(x => x.FollowerId == userId);
 
-        List<FollowUserResponse> following = await _dbContext.Follows
+        List<FollowUserReadDto> following = await _dbContext.Follows
             .AsNoTracking()
             .Where(x => x.FollowerId == userId)
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
-            .Select(x => new FollowUserResponse
+            .Select(x => new FollowUserReadDto
             {
                 UserId = x.FollowingId,
                 UserName = x.Following.UserName ?? string.Empty,
@@ -151,11 +158,11 @@ public class FollowsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new
+        return Ok(new FollowListReadDto
         {
-            userId,
-            totalCount,
-            items = following
+            UserId = userId,
+            TotalCount = totalCount,
+            Items = following
         });
     }
 

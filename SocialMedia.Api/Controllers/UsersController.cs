@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SocialMedia.Api.Application.Dtos.Common;
+using SocialMedia.Api.Application.Dtos.Users;
 using SocialMedia.Api.Domain.Entities;
 using SocialMedia.Api.Infrastructure.Persistence;
 
@@ -18,67 +20,13 @@ public class UsersController : ControllerBase
         _dbContext = dbContext;
     }
 
-    public class UserProfileResponse
-    {
-        public Guid Id { get; set; }
-        public string UserName { get; set; } = string.Empty;
-        public string? Bio { get; set; }
-        public string? AvatarUrl { get; set; }
-        public DateTimeOffset CreatedAtUtc { get; set; }
-        public int PostCount { get; set; }
-        public int CommentCount { get; set; }
-        public int LikeCount { get; set; }
-        public int FollowersCount { get; set; }
-        public int FollowingCount { get; set; }
-    }
-
-    public class MyProfileResponse : UserProfileResponse
-    {
-        public string Email { get; set; } = string.Empty;
-    }
-
-    public class UpdateMyProfileRequest
-    {
-        public string? Bio { get; set; }
-        public string? AvatarUrl { get; set; }
-    }
-
-    public class UserPostResponse
-    {
-        public Guid Id { get; set; }
-        public string Text { get; set; } = string.Empty;
-        public DateTimeOffset CreatedAtUtc { get; set; }
-        public Guid? ReplyToPostId { get; set; }
-        public int LikeCount { get; set; }
-        public int CommentCount { get; set; }
-    }
-
-    public class UserCommentResponse
-    {
-        public Guid Id { get; set; }
-        public Guid PostId { get; set; }
-        public string Body { get; set; } = string.Empty;
-        public Guid? ParentCommentId { get; set; }
-        public DateTimeOffset CreatedAtUtc { get; set; }
-    }
-
-    public class UserLikedPostResponse
-    {
-        public Guid PostId { get; set; }
-        public Guid AuthorId { get; set; }
-        public string AuthorUserName { get; set; } = string.Empty;
-        public string Text { get; set; } = string.Empty;
-        public DateTimeOffset PostCreatedAtUtc { get; set; }
-        public DateTimeOffset LikedAtUtc { get; set; }
-    }
-
     [HttpGet("{userId:guid}")]
     public async Task<IActionResult> GetById([FromRoute] Guid userId)
     {
-        UserProfileResponse? user = await _dbContext.Users
+        UserProfileReadDto? user = await _dbContext.Users
             .AsNoTracking()
             .Where(x => x.Id == userId)
-            .Select(x => new UserProfileResponse
+            .Select(x => new UserProfileReadDto
             {
                 Id = x.Id,
                 UserName = x.UserName ?? string.Empty,
@@ -110,10 +58,10 @@ public class UsersController : ControllerBase
             return Unauthorized("Geçersiz kullanıcı token'ı.");
         }
 
-        MyProfileResponse? me = await _dbContext.Users
+        MyProfileReadDto? me = await _dbContext.Users
             .AsNoTracking()
             .Where(x => x.Id == currentUserId)
-            .Select(x => new MyProfileResponse
+            .Select(x => new MyProfileReadDto
             {
                 Id = x.Id,
                 UserName = x.UserName ?? string.Empty,
@@ -139,7 +87,7 @@ public class UsersController : ControllerBase
 
     [Authorize]
     [HttpPatch("me")]
-    public async Task<IActionResult> UpdateMe([FromBody] UpdateMyProfileRequest request)
+    public async Task<IActionResult> UpdateMe([FromBody] UpdateMyProfileWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
 
@@ -189,7 +137,10 @@ public class UsersController : ControllerBase
 
         await _dbContext.SaveChangesAsync();
 
-        return Ok(new { message = "Profil güncellendi." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Profil güncellendi."
+        });
     }
 
     [HttpGet("{userId:guid}/posts")]
@@ -206,13 +157,13 @@ public class UsersController : ControllerBase
             return NotFound("Kullanıcı bulunamadı.");
         }
 
-        List<UserPostResponse> posts = await _dbContext.Posts
+        List<UserPostReadDto> posts = await _dbContext.Posts
             .AsNoTracking()
             .Where(x => x.AuthorId == userId)
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
-            .Select(x => new UserPostResponse
+            .Select(x => new UserPostReadDto
             {
                 Id = x.Id,
                 Text = x.Text,
@@ -240,13 +191,13 @@ public class UsersController : ControllerBase
             return NotFound("Kullanıcı bulunamadı.");
         }
 
-        List<UserCommentResponse> comments = await _dbContext.Comments
+        List<UserCommentReadDto> comments = await _dbContext.Comments
             .AsNoTracking()
             .Where(x => x.AuthorId == userId)
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
-            .Select(x => new UserCommentResponse
+            .Select(x => new UserCommentReadDto
             {
                 Id = x.Id,
                 PostId = x.PostId,
@@ -273,13 +224,13 @@ public class UsersController : ControllerBase
             return NotFound("Kullanıcı bulunamadı.");
         }
 
-        List<UserLikedPostResponse> likedPosts = await _dbContext.PostLikes
+        List<UserLikedPostReadDto> likedPosts = await _dbContext.PostLikes
             .AsNoTracking()
             .Where(x => x.UserId == userId)
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
-            .Select(x => new UserLikedPostResponse
+            .Select(x => new UserLikedPostReadDto
             {
                 PostId = x.PostId,
                 AuthorId = x.Post.AuthorId,

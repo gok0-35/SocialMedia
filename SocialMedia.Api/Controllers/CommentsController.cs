@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SocialMedia.Api.Application.Dtos.Comments;
+using SocialMedia.Api.Application.Dtos.Common;
 using SocialMedia.Api.Domain.Entities;
 using SocialMedia.Api.Infrastructure.Persistence;
 
@@ -18,29 +20,6 @@ public class CommentsController : ControllerBase
         _dbContext = dbContext;
     }
 
-    public class CreateCommentRequest
-    {
-        public string Body { get; set; } = string.Empty;
-        public Guid? ParentCommentId { get; set; }
-    }
-
-    public class UpdateCommentRequest
-    {
-        public string Body { get; set; } = string.Empty;
-    }
-
-    public class CommentResponse
-    {
-        public Guid Id { get; set; }
-        public Guid PostId { get; set; }
-        public Guid AuthorId { get; set; }
-        public string AuthorUserName { get; set; } = string.Empty;
-        public string Body { get; set; } = string.Empty;
-        public Guid? ParentCommentId { get; set; }
-        public DateTimeOffset CreatedAtUtc { get; set; }
-        public int ChildrenCount { get; set; }
-    }
-
     [HttpGet]
     public async Task<IActionResult> GetByPost([FromRoute] Guid postId, [FromQuery] int skip = 0, [FromQuery] int take = 20)
     {
@@ -55,13 +34,13 @@ public class CommentsController : ControllerBase
             return NotFound("Post bulunamadı.");
         }
 
-        List<CommentResponse> comments = await _dbContext.Comments
+        List<CommentReadDto> comments = await _dbContext.Comments
             .AsNoTracking()
             .Where(x => x.PostId == postId)
             .OrderBy(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
-            .Select(x => new CommentResponse
+            .Select(x => new CommentReadDto
             {
                 Id = x.Id,
                 PostId = x.PostId,
@@ -80,10 +59,10 @@ public class CommentsController : ControllerBase
     [HttpGet("/api/comments/{commentId:guid}")]
     public async Task<IActionResult> GetById([FromRoute] Guid commentId)
     {
-        CommentResponse? comment = await _dbContext.Comments
+        CommentReadDto? comment = await _dbContext.Comments
             .AsNoTracking()
             .Where(x => x.Id == commentId)
-            .Select(x => new CommentResponse
+            .Select(x => new CommentReadDto
             {
                 Id = x.Id,
                 PostId = x.PostId,
@@ -118,13 +97,13 @@ public class CommentsController : ControllerBase
             return NotFound("Yorum bulunamadı.");
         }
 
-        List<CommentResponse> children = await _dbContext.Comments
+        List<CommentReadDto> children = await _dbContext.Comments
             .AsNoTracking()
             .Where(x => x.ParentCommentId == commentId)
             .OrderBy(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
-            .Select(x => new CommentResponse
+            .Select(x => new CommentReadDto
             {
                 Id = x.Id,
                 PostId = x.PostId,
@@ -142,7 +121,7 @@ public class CommentsController : ControllerBase
 
     [Authorize]
     [HttpPost]
-    public async Task<IActionResult> Create([FromRoute] Guid postId, [FromBody] CreateCommentRequest request)
+    public async Task<IActionResult> Create([FromRoute] Guid postId, [FromBody] CreateCommentWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
         if (string.IsNullOrWhiteSpace(request.Body)) return BadRequest("Body zorunlu.");
@@ -190,10 +169,10 @@ public class CommentsController : ControllerBase
         _dbContext.Comments.Add(comment);
         await _dbContext.SaveChangesAsync();
 
-        return Created($"/api/comments/{comment.Id}", new
+        return Created($"/api/comments/{comment.Id}", new CreatedCommentReadDto
         {
-            message = "Yorum eklendi.",
-            commentId = comment.Id
+            Message = "Yorum eklendi.",
+            CommentId = comment.Id
         });
     }
 
@@ -220,12 +199,15 @@ public class CommentsController : ControllerBase
         _dbContext.Comments.Remove(comment);
         await _dbContext.SaveChangesAsync();
 
-        return Ok(new { message = "Yorum silindi." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Yorum silindi."
+        });
     }
 
     [Authorize]
     [HttpPatch("/api/comments/{commentId:guid}")]
-    public async Task<IActionResult> Update([FromRoute] Guid commentId, [FromBody] UpdateCommentRequest request)
+    public async Task<IActionResult> Update([FromRoute] Guid commentId, [FromBody] UpdateCommentWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
         if (string.IsNullOrWhiteSpace(request.Body)) return BadRequest("Body zorunlu.");
@@ -252,7 +234,10 @@ public class CommentsController : ControllerBase
         comment.Body = body;
         await _dbContext.SaveChangesAsync();
 
-        return Ok(new { message = "Yorum güncellendi." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Yorum güncellendi."
+        });
     }
 
     private static bool TryValidatePagination(int skip, int take, out IActionResult? errorResult)

@@ -11,6 +11,7 @@ using SocialMedia.Api.Domain.Entities;
 using SocialMedia.Api.Infrastructure.Auth;
 using SocialMedia.Api.Infrastructure.Configuration;
 using SocialMedia.Api.Infrastructure.Email;
+using SocialMedia.Api.Infrastructure.Middleware;
 using SocialMedia.Api.Infrastructure.Persistence;
 using SocialMedia.Api.Infrastructure.Persistence.Repositories;
 
@@ -117,6 +118,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<GlobalExceptionMiddleware>();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

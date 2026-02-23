@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.IdentityModel.Tokens;
+using SocialMedia.Api.Application.Dtos.Auth;
+using SocialMedia.Api.Application.Dtos.Common;
 using SocialMedia.Api.Domain.Entities;
 using SocialMedia.Api.Infrastructure.Auth;
 using SocialMedia.Api.Infrastructure.Email;
@@ -32,47 +34,8 @@ public class AuthController : ControllerBase
         _emailSender = emailSender;
     }
 
-    public class RegisterRequest
-    {
-        public string UserName { get; set; } = string.Empty;
-        public string Email { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty;
-    }
-
-    public class LoginRequest
-    {
-        public string Email { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty;
-    }
-
-    public class ResendConfirmationEmailRequest
-    {
-        public string Email { get; set; } = string.Empty;
-    }
-
-    public class ForgotPasswordRequest
-    {
-        public string Email { get; set; } = string.Empty;
-    }
-
-    public class ResetPasswordRequest
-    {
-        public string Email { get; set; } = string.Empty;
-        public string Token { get; set; } = string.Empty;
-        public string NewPassword { get; set; } = string.Empty;
-    }
-
-    public class AuthResponse
-    {
-        public string Token { get; set; } = string.Empty;
-        public DateTimeOffset ExpiresAtUtc { get; set; }
-        public Guid UserId { get; set; }
-        public string UserName { get; set; } = string.Empty;
-        public string Email { get; set; } = string.Empty;
-    }
-
     [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    public async Task<IActionResult> Register([FromBody] RegisterWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
         if (string.IsNullOrWhiteSpace(request.Email)) return BadRequest("Email zorunlu.");
@@ -94,14 +57,14 @@ public class AuthController : ControllerBase
 
         await SendEmailConfirmationAsync(user);
 
-        return Ok(new
+        return Ok(new MessageReadDto
         {
-            message = "Kayıt başarılı. Giriş yapmadan önce email adresini onaylamalısın."
+            Message = "Kayıt başarılı. Giriş yapmadan önce email adresini onaylamalısın."
         });
     }
 
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    public async Task<IActionResult> Login([FromBody] LoginWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
         if (string.IsNullOrWhiteSpace(request.Email)) return BadRequest("Email zorunlu.");
@@ -126,7 +89,7 @@ public class AuthController : ControllerBase
             return Unauthorized("Email veya şifre hatalı.");
         }
 
-        AuthResponse response = CreateToken(user);
+        AuthReadDto response = CreateToken(user);
         return Ok(response);
     }
 
@@ -153,11 +116,14 @@ public class AuthController : ControllerBase
             return BadRequest(result.Errors);
         }
 
-        return Ok(new { message = "Email başarıyla onaylandı." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Email başarıyla onaylandı."
+        });
     }
 
     [HttpPost("resend-confirmation-email")]
-    public async Task<IActionResult> ResendConfirmationEmail([FromBody] ResendConfirmationEmailRequest request)
+    public async Task<IActionResult> ResendConfirmationEmail([FromBody] ResendConfirmationEmailWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
         if (string.IsNullOrWhiteSpace(request.Email)) return BadRequest("Email zorunlu.");
@@ -170,11 +136,14 @@ public class AuthController : ControllerBase
             await SendEmailConfirmationAsync(user);
         }
 
-        return Ok(new { message = "Hesap varsa onay emaili gönderildi." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Hesap varsa onay emaili gönderildi."
+        });
     }
 
     [HttpPost("forgot-password")]
-    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
         if (string.IsNullOrWhiteSpace(request.Email)) return BadRequest("Email zorunlu.");
@@ -196,11 +165,14 @@ public class AuthController : ControllerBase
             await _emailSender.SendEmailAsync(email, "SocialMedia - Şifre Sıfırlama", htmlBody);
         }
 
-        return Ok(new { message = "Hesap varsa şifre sıfırlama emaili gönderildi." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Hesap varsa şifre sıfırlama emaili gönderildi."
+        });
     }
 
     [HttpPost("reset-password")]
-    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
         if (string.IsNullOrWhiteSpace(request.Email)) return BadRequest("Email zorunlu.");
@@ -225,10 +197,13 @@ public class AuthController : ControllerBase
             return BadRequest(result.Errors);
         }
 
-        return Ok(new { message = "Şifre başarıyla güncellendi." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Şifre başarıyla güncellendi."
+        });
     }
 
-    private AuthResponse CreateToken(ApplicationUser user)
+    private AuthReadDto CreateToken(ApplicationUser user)
     {
         DateTimeOffset expiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(_jwtSettings.ExpiresMinutes);
 
@@ -251,7 +226,7 @@ public class AuthController : ControllerBase
 
         string tokenString = new JwtSecurityTokenHandler().WriteToken(token);
 
-        AuthResponse response = new AuthResponse();
+        AuthReadDto response = new AuthReadDto();
         response.Token = tokenString;
         response.ExpiresAtUtc = expiresAtUtc;
         response.UserId = user.Id;

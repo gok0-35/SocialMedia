@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SocialMedia.Api.Application.Dtos.Tags;
 using SocialMedia.Api.Infrastructure.Persistence;
 
 namespace SocialMedia.Api.Controllers;
@@ -13,26 +14,6 @@ public class TagsController : ControllerBase
     public TagsController(AppDbContext dbContext)
     {
         _dbContext = dbContext;
-    }
-
-    public class TagSummaryResponse
-    {
-        public Guid Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public DateTimeOffset CreatedAtUtc { get; set; }
-        public int PostCount { get; set; }
-    }
-
-    public class TagPostResponse
-    {
-        public Guid Id { get; set; }
-        public Guid AuthorId { get; set; }
-        public string AuthorUserName { get; set; } = string.Empty;
-        public string Text { get; set; } = string.Empty;
-        public DateTimeOffset CreatedAtUtc { get; set; }
-        public Guid? ReplyToPostId { get; set; }
-        public int LikeCount { get; set; }
-        public int CommentCount { get; set; }
     }
 
     [HttpGet]
@@ -51,11 +32,11 @@ public class TagsController : ControllerBase
             query = query.Where(x => x.Name.Contains(normalizedQuery));
         }
 
-        List<TagSummaryResponse> tags = await query
+        List<TagSummaryReadDto> tags = await query
             .OrderBy(x => x.Name)
             .Skip(skip)
             .Take(take)
-            .Select(x => new TagSummaryResponse
+            .Select(x => new TagSummaryReadDto
             {
                 Id = x.Id,
                 Name = x.Name,
@@ -82,11 +63,11 @@ public class TagsController : ControllerBase
 
         DateTimeOffset fromDate = DateTimeOffset.UtcNow.AddDays(-days);
 
-        var trending = await _dbContext.PostTags
+        List<TrendingTagReadDto> trending = await _dbContext.PostTags
             .AsNoTracking()
             .Where(x => x.Post.CreatedAtUtc >= fromDate)
             .GroupBy(x => new { x.TagId, x.Tag.Name })
-            .Select(x => new
+            .Select(x => new TrendingTagReadDto
             {
                 TagId = x.Key.TagId,
                 Name = x.Key.Name,
@@ -123,13 +104,13 @@ public class TagsController : ControllerBase
             return NotFound("Tag bulunamadı.");
         }
 
-        List<TagPostResponse> posts = await _dbContext.Posts
+        List<TagPostReadDto> posts = await _dbContext.Posts
             .AsNoTracking()
             .Where(x => x.PostTags.Any(pt => pt.TagId == tag.Id))
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
-            .Select(x => new TagPostResponse
+            .Select(x => new TagPostReadDto
             {
                 Id = x.Id,
                 AuthorId = x.AuthorId,
@@ -142,10 +123,10 @@ public class TagsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new
+        return Ok(new TagPostsReadDto
         {
-            tag = tag.Name,
-            items = posts
+            Tag = tag.Name,
+            Items = posts
         });
     }
 

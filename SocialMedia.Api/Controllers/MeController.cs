@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SocialMedia.Api.Application.Dtos.Me;
 
 namespace SocialMedia.Api.Controllers;
 
@@ -15,6 +16,10 @@ public class MeController : ControllerBase
         string? userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         string? userName = User.FindFirstValue(ClaimTypes.Name);
 
-        return Ok(new { userId, userName });
+        return Ok(new MeReadDto
+        {
+            UserId = userId,
+            UserName = userName
+        });
     }
 }

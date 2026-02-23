@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SocialMedia.Api.Application.Dtos.Common;
+using SocialMedia.Api.Application.Dtos.Posts;
 using SocialMedia.Api.Domain.Entities;
 using SocialMedia.Api.Infrastructure.Persistence;
 
@@ -18,49 +20,9 @@ public class PostsController : ControllerBase
         _dbContext = dbContext;
     }
 
-    public class CreatePostRequest
-    {
-        public string Text { get; set; } = string.Empty;
-        public Guid? ReplyToPostId { get; set; }
-        public List<string>? Tags { get; set; }
-    }
-
-    public class CreateReplyRequest
-    {
-        public string Text { get; set; } = string.Empty;
-        public List<string>? Tags { get; set; }
-    }
-
-    public class UpdatePostRequest
-    {
-        public string Text { get; set; } = string.Empty;
-        public List<string>? Tags { get; set; }
-    }
-
-    public class PostSummaryResponse
-    {
-        public Guid Id { get; set; }
-        public Guid AuthorId { get; set; }
-        public string AuthorUserName { get; set; } = string.Empty;
-        public string Text { get; set; } = string.Empty;
-        public Guid? ReplyToPostId { get; set; }
-        public DateTimeOffset CreatedAtUtc { get; set; }
-        public int LikeCount { get; set; }
-        public int CommentCount { get; set; }
-        public int ReplyCount { get; set; }
-        public List<string> Tags { get; set; } = new();
-    }
-
-    public class LikeUserResponse
-    {
-        public Guid UserId { get; set; }
-        public string UserName { get; set; } = string.Empty;
-        public DateTimeOffset LikedAtUtc { get; set; }
-    }
-
     [Authorize]
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreatePostRequest request)
+    public async Task<IActionResult> Create([FromBody] CreatePostWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
         return await CreatePostInternalAsync(request.Text, request.Tags, request.ReplyToPostId);
@@ -68,7 +30,7 @@ public class PostsController : ControllerBase
 
     [Authorize]
     [HttpPost("{postId:guid}/replies")]
-    public async Task<IActionResult> CreateReply([FromRoute] Guid postId, [FromBody] CreateReplyRequest request)
+    public async Task<IActionResult> CreateReply([FromRoute] Guid postId, [FromBody] CreateReplyWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
         return await CreatePostInternalAsync(request.Text, request.Tags, postId);
@@ -76,7 +38,7 @@ public class PostsController : ControllerBase
 
     [Authorize]
     [HttpPatch("{postId:guid}")]
-    public async Task<IActionResult> Update([FromRoute] Guid postId, [FromBody] UpdatePostRequest request)
+    public async Task<IActionResult> Update([FromRoute] Guid postId, [FromBody] UpdatePostWriteDto request)
     {
         if (request == null) return BadRequest("Body boş olamaz.");
         if (string.IsNullOrWhiteSpace(request.Text)) return BadRequest("Text zorunlu.");
@@ -114,7 +76,10 @@ public class PostsController : ControllerBase
         }
 
         await _dbContext.SaveChangesAsync();
-        return Ok(new { message = "Post güncellendi." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Post güncellendi."
+        });
     }
 
     [HttpGet]
@@ -142,7 +107,7 @@ public class PostsController : ControllerBase
             query = query.Where(x => x.PostTags.Any(pt => pt.Tag.Name == normalizedTag));
         }
 
-        List<PostSummaryResponse> posts = await BuildPostSummaryQuery(query)
+        List<PostSummaryReadDto> posts = await BuildPostSummaryQuery(query)
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
@@ -175,7 +140,7 @@ public class PostsController : ControllerBase
         IQueryable<Post> feedQuery = _dbContext.Posts.AsNoTracking()
             .Where(x => x.AuthorId == currentUserId || followingIdsQuery.Contains(x.AuthorId));
 
-        List<PostSummaryResponse> posts = await BuildPostSummaryQuery(feedQuery)
+        List<PostSummaryReadDto> posts = await BuildPostSummaryQuery(feedQuery)
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
@@ -189,7 +154,7 @@ public class PostsController : ControllerBase
     [HttpGet("{postId:guid}")]
     public async Task<IActionResult> GetById([FromRoute] Guid postId)
     {
-        PostSummaryResponse? post = await BuildPostSummaryQuery(_dbContext.Posts.AsNoTracking().Where(x => x.Id == postId))
+        PostSummaryReadDto? post = await BuildPostSummaryQuery(_dbContext.Posts.AsNoTracking().Where(x => x.Id == postId))
             .FirstOrDefaultAsync();
 
         if (post == null)
@@ -197,7 +162,7 @@ public class PostsController : ControllerBase
             return NotFound("Post bulunamadı.");
         }
 
-        await PopulateTagsAsync(new List<PostSummaryResponse> { post });
+        await PopulateTagsAsync(new List<PostSummaryReadDto> { post });
 
         return Ok(post);
     }
@@ -218,7 +183,7 @@ public class PostsController : ControllerBase
 
         IQueryable<Post> query = _dbContext.Posts.AsNoTracking().Where(x => x.ReplyToPostId == postId);
 
-        List<PostSummaryResponse> replies = await BuildPostSummaryQuery(query)
+        List<PostSummaryReadDto> replies = await BuildPostSummaryQuery(query)
             .OrderBy(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
@@ -252,7 +217,10 @@ public class PostsController : ControllerBase
         _dbContext.Posts.Remove(post);
         await _dbContext.SaveChangesAsync();
 
-        return Ok(new { message = "Post silindi." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Post silindi."
+        });
     }
 
     [Authorize]
@@ -273,7 +241,10 @@ public class PostsController : ControllerBase
         PostLike? existingLike = await _dbContext.PostLikes.FindAsync(currentUserId, postId);
         if (existingLike != null)
         {
-            return Ok(new { message = "Post zaten beğenilmiş." });
+            return Ok(new MessageReadDto
+            {
+                Message = "Post zaten beğenilmiş."
+            });
         }
 
         _dbContext.PostLikes.Add(new PostLike
@@ -283,7 +254,10 @@ public class PostsController : ControllerBase
         });
 
         await _dbContext.SaveChangesAsync();
-        return Ok(new { message = "Post beğenildi." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Post beğenildi."
+        });
     }
 
     [Authorize]
@@ -298,13 +272,19 @@ public class PostsController : ControllerBase
         PostLike? existingLike = await _dbContext.PostLikes.FindAsync(currentUserId, postId);
         if (existingLike == null)
         {
-            return Ok(new { message = "Post daha önce beğenilmemiş." });
+            return Ok(new MessageReadDto
+            {
+                Message = "Post daha önce beğenilmemiş."
+            });
         }
 
         _dbContext.PostLikes.Remove(existingLike);
         await _dbContext.SaveChangesAsync();
 
-        return Ok(new { message = "Post beğenisi kaldırıldı." });
+        return Ok(new MessageReadDto
+        {
+            Message = "Post beğenisi kaldırıldı."
+        });
     }
 
     [HttpGet("{postId:guid}/likes")]
@@ -323,13 +303,13 @@ public class PostsController : ControllerBase
 
         int totalCount = await _dbContext.PostLikes.CountAsync(x => x.PostId == postId);
 
-        List<LikeUserResponse> users = await _dbContext.PostLikes
+        List<LikeUserReadDto> users = await _dbContext.PostLikes
             .AsNoTracking()
             .Where(x => x.PostId == postId)
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip(skip)
             .Take(take)
-            .Select(x => new LikeUserResponse
+            .Select(x => new LikeUserReadDto
             {
                 UserId = x.UserId,
                 UserName = x.User.UserName ?? string.Empty,
@@ -337,11 +317,11 @@ public class PostsController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new
+        return Ok(new PostLikesReadDto
         {
-            postId,
-            totalCount,
-            items = users
+            PostId = postId,
+            TotalCount = totalCount,
+            Items = users
         });
     }
 
@@ -385,10 +365,10 @@ public class PostsController : ControllerBase
 
         await _dbContext.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetById), new { postId = post.Id }, new
+        return CreatedAtAction(nameof(GetById), new { postId = post.Id }, new CreatedPostReadDto
         {
-            message = "Post oluşturuldu.",
-            postId = post.Id
+            Message = "Post oluşturuldu.",
+            PostId = post.Id
         });
     }
 
@@ -437,9 +417,9 @@ public class PostsController : ControllerBase
         }
     }
 
-    private IQueryable<PostSummaryResponse> BuildPostSummaryQuery(IQueryable<Post> query)
+    private IQueryable<PostSummaryReadDto> BuildPostSummaryQuery(IQueryable<Post> query)
     {
-        return query.Select(x => new PostSummaryResponse
+        return query.Select(x => new PostSummaryReadDto
         {
             Id = x.Id,
             AuthorId = x.AuthorId,
@@ -453,7 +433,7 @@ public class PostsController : ControllerBase
         });
     }
 
-    private async Task PopulateTagsAsync(List<PostSummaryResponse> posts)
+    private async Task PopulateTagsAsync(List<PostSummaryReadDto> posts)
     {
         if (posts.Count == 0)
         {
@@ -474,7 +454,7 @@ public class PostsController : ControllerBase
                 x => x.Key,
                 x => x.Select(t => t.TagName).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(t => t).ToList());
 
-        foreach (PostSummaryResponse post in posts)
+        foreach (PostSummaryReadDto post in posts)
         {
             if (tagsByPostId.TryGetValue(post.Id, out List<string>? tags))
             {

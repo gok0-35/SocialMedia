@@ -1,17 +1,17 @@
-using Microsoft.EntityFrameworkCore;
 using SocialMedia.Api.Application.Dtos.Tags;
+using SocialMedia.Api.Application.Repositories.Abstractions;
 using SocialMedia.Api.Application.Services.Abstractions;
-using SocialMedia.Api.Infrastructure.Persistence;
+using SocialMedia.Api.Domain.Entities;
 
 namespace SocialMedia.Api.Application.Services;
 
 public class TagService : ITagService
 {
-    private readonly AppDbContext _dbContext;
+    private readonly ITagRepository _tagRepository;
 
-    public TagService(AppDbContext dbContext)
+    public TagService(ITagRepository tagRepository)
     {
-        _dbContext = dbContext;
+        _tagRepository = tagRepository;
     }
 
     public async Task<ServiceResult<List<TagSummaryReadDto>>> GetTagsAsync(int skip, int take, string? q)
@@ -22,26 +22,13 @@ public class TagService : ITagService
             return ServiceResult<List<TagSummaryReadDto>>.Fail(paginationError.Type, paginationError.Message);
         }
 
-        IQueryable<Domain.Entities.Tag> query = _dbContext.Tags.AsNoTracking();
-
+        string? normalizedQuery = null;
         if (!string.IsNullOrWhiteSpace(q))
         {
-            string normalizedQuery = NormalizeTagName(q);
-            query = query.Where(x => x.Name.Contains(normalizedQuery));
+            normalizedQuery = NormalizeTagName(q);
         }
 
-        List<TagSummaryReadDto> tags = await query
-            .OrderBy(x => x.Name)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new TagSummaryReadDto
-            {
-                Id = x.Id,
-                Name = x.Name,
-                CreatedAtUtc = x.CreatedAtUtc,
-                PostCount = x.PostTags.Count
-            })
-            .ToListAsync();
+        List<TagSummaryReadDto> tags = await _tagRepository.GetTagsAsync(skip, take, normalizedQuery);
 
         return ServiceResult<List<TagSummaryReadDto>>.Success(tags);
     }
@@ -60,20 +47,7 @@ public class TagService : ITagService
 
         DateTimeOffset fromDate = DateTimeOffset.UtcNow.AddDays(-days);
 
-        List<TrendingTagReadDto> trending = await _dbContext.PostTags
-            .AsNoTracking()
-            .Where(x => x.Post.CreatedAtUtc >= fromDate)
-            .GroupBy(x => new { x.TagId, x.Tag.Name })
-            .Select(x => new TrendingTagReadDto
-            {
-                TagId = x.Key.TagId,
-                Name = x.Key.Name,
-                PostCount = x.Count()
-            })
-            .OrderByDescending(x => x.PostCount)
-            .ThenBy(x => x.Name)
-            .Take(take)
-            .ToListAsync();
+        List<TrendingTagReadDto> trending = await _tagRepository.GetTrendingAsync(take, fromDate);
 
         return ServiceResult<List<TrendingTagReadDto>>.Success(trending);
     }
@@ -92,33 +66,14 @@ public class TagService : ITagService
             return ServiceResult<TagPostsReadDto>.Fail(ServiceErrorType.BadRequest, "Geçerli bir tag adı girilmelidir.");
         }
 
-        Domain.Entities.Tag? tag = await _dbContext.Tags
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Name == normalizedTagName);
+        Tag? tag = await _tagRepository.GetByNameAsync(normalizedTagName);
 
         if (tag == null)
         {
             return ServiceResult<TagPostsReadDto>.Fail(ServiceErrorType.NotFound, "Tag bulunamadı.");
         }
 
-        List<TagPostReadDto> posts = await _dbContext.Posts
-            .AsNoTracking()
-            .Where(x => x.PostTags.Any(pt => pt.TagId == tag.Id))
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new TagPostReadDto
-            {
-                Id = x.Id,
-                AuthorId = x.AuthorId,
-                AuthorUserName = x.Author.UserName ?? string.Empty,
-                Text = x.Text,
-                CreatedAtUtc = x.CreatedAtUtc,
-                ReplyToPostId = x.ReplyToPostId,
-                LikeCount = x.Likes.Count,
-                CommentCount = x.Comments.Count
-            })
-            .ToListAsync();
+        List<TagPostReadDto> posts = await _tagRepository.GetPostsByTagIdAsync(tag.Id, skip, take);
 
         return ServiceResult<TagPostsReadDto>.Success(new TagPostsReadDto
         {
@@ -153,4 +108,3 @@ public class TagService : ITagService
         return tag.Trim().ToLowerInvariant();
     }
 }
-

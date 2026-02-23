@@ -1,40 +1,23 @@
-using Microsoft.EntityFrameworkCore;
 using SocialMedia.Api.Application.Dtos.Common;
 using SocialMedia.Api.Application.Dtos.Users;
+using SocialMedia.Api.Application.Repositories.Abstractions;
 using SocialMedia.Api.Application.Services.Abstractions;
 using SocialMedia.Api.Domain.Entities;
-using SocialMedia.Api.Infrastructure.Persistence;
 
 namespace SocialMedia.Api.Application.Services;
 
 public class UserService : IUserService
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IUserRepository _userRepository;
 
-    public UserService(AppDbContext dbContext)
+    public UserService(IUserRepository userRepository)
     {
-        _dbContext = dbContext;
+        _userRepository = userRepository;
     }
 
     public async Task<ServiceResult<UserProfileReadDto>> GetByIdAsync(Guid userId)
     {
-        UserProfileReadDto? user = await _dbContext.Users
-            .AsNoTracking()
-            .Where(x => x.Id == userId)
-            .Select(x => new UserProfileReadDto
-            {
-                Id = x.Id,
-                UserName = x.UserName ?? string.Empty,
-                Bio = x.Bio,
-                AvatarUrl = x.AvatarUrl,
-                CreatedAtUtc = x.CreatedAtUtc,
-                PostCount = x.Posts.Count,
-                CommentCount = x.Comments.Count,
-                LikeCount = x.Likes.Count,
-                FollowersCount = x.Followers.Count,
-                FollowingCount = x.Following.Count
-            })
-            .FirstOrDefaultAsync();
+        UserProfileReadDto? user = await _userRepository.GetProfileAsync(userId);
 
         if (user == null)
         {
@@ -46,24 +29,7 @@ public class UserService : IUserService
 
     public async Task<ServiceResult<MyProfileReadDto>> GetMeAsync(Guid currentUserId)
     {
-        MyProfileReadDto? me = await _dbContext.Users
-            .AsNoTracking()
-            .Where(x => x.Id == currentUserId)
-            .Select(x => new MyProfileReadDto
-            {
-                Id = x.Id,
-                UserName = x.UserName ?? string.Empty,
-                Email = x.Email ?? string.Empty,
-                Bio = x.Bio,
-                AvatarUrl = x.AvatarUrl,
-                CreatedAtUtc = x.CreatedAtUtc,
-                PostCount = x.Posts.Count,
-                CommentCount = x.Comments.Count,
-                LikeCount = x.Likes.Count,
-                FollowersCount = x.Followers.Count,
-                FollowingCount = x.Following.Count
-            })
-            .FirstOrDefaultAsync();
+        MyProfileReadDto? me = await _userRepository.GetMyProfileAsync(currentUserId);
 
         if (me == null)
         {
@@ -80,7 +46,7 @@ public class UserService : IUserService
             return ServiceResult<MessageReadDto>.Fail(ServiceErrorType.BadRequest, "Body boş olamaz.");
         }
 
-        ApplicationUser? user = await _dbContext.Users.FirstOrDefaultAsync(x => x.Id == currentUserId);
+        ApplicationUser? user = await _userRepository.GetByIdAsync(currentUserId);
         if (user == null)
         {
             return ServiceResult<MessageReadDto>.Fail(ServiceErrorType.NotFound, "Kullanıcı bulunamadı.");
@@ -119,7 +85,7 @@ public class UserService : IUserService
             }
         }
 
-        await _dbContext.SaveChangesAsync();
+        await _userRepository.SaveChangesAsync();
 
         return ServiceResult<MessageReadDto>.Success(new MessageReadDto
         {
@@ -135,28 +101,13 @@ public class UserService : IUserService
             return ServiceResult<List<UserPostReadDto>>.Fail(paginationError.Type, paginationError.Message);
         }
 
-        bool userExists = await _dbContext.Users.AnyAsync(x => x.Id == userId);
+        bool userExists = await _userRepository.ExistsAsync(userId);
         if (!userExists)
         {
             return ServiceResult<List<UserPostReadDto>>.Fail(ServiceErrorType.NotFound, "Kullanıcı bulunamadı.");
         }
 
-        List<UserPostReadDto> posts = await _dbContext.Posts
-            .AsNoTracking()
-            .Where(x => x.AuthorId == userId)
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new UserPostReadDto
-            {
-                Id = x.Id,
-                Text = x.Text,
-                CreatedAtUtc = x.CreatedAtUtc,
-                ReplyToPostId = x.ReplyToPostId,
-                LikeCount = x.Likes.Count,
-                CommentCount = x.Comments.Count
-            })
-            .ToListAsync();
+        List<UserPostReadDto> posts = await _userRepository.GetPostsAsync(userId, skip, take);
 
         return ServiceResult<List<UserPostReadDto>>.Success(posts);
     }
@@ -169,27 +120,13 @@ public class UserService : IUserService
             return ServiceResult<List<UserCommentReadDto>>.Fail(paginationError.Type, paginationError.Message);
         }
 
-        bool userExists = await _dbContext.Users.AnyAsync(x => x.Id == userId);
+        bool userExists = await _userRepository.ExistsAsync(userId);
         if (!userExists)
         {
             return ServiceResult<List<UserCommentReadDto>>.Fail(ServiceErrorType.NotFound, "Kullanıcı bulunamadı.");
         }
 
-        List<UserCommentReadDto> comments = await _dbContext.Comments
-            .AsNoTracking()
-            .Where(x => x.AuthorId == userId)
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new UserCommentReadDto
-            {
-                Id = x.Id,
-                PostId = x.PostId,
-                Body = x.Body,
-                ParentCommentId = x.ParentCommentId,
-                CreatedAtUtc = x.CreatedAtUtc
-            })
-            .ToListAsync();
+        List<UserCommentReadDto> comments = await _userRepository.GetCommentsAsync(userId, skip, take);
 
         return ServiceResult<List<UserCommentReadDto>>.Success(comments);
     }
@@ -202,28 +139,13 @@ public class UserService : IUserService
             return ServiceResult<List<UserLikedPostReadDto>>.Fail(paginationError.Type, paginationError.Message);
         }
 
-        bool userExists = await _dbContext.Users.AnyAsync(x => x.Id == userId);
+        bool userExists = await _userRepository.ExistsAsync(userId);
         if (!userExists)
         {
             return ServiceResult<List<UserLikedPostReadDto>>.Fail(ServiceErrorType.NotFound, "Kullanıcı bulunamadı.");
         }
 
-        List<UserLikedPostReadDto> likedPosts = await _dbContext.PostLikes
-            .AsNoTracking()
-            .Where(x => x.UserId == userId)
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new UserLikedPostReadDto
-            {
-                PostId = x.PostId,
-                AuthorId = x.Post.AuthorId,
-                AuthorUserName = x.Post.Author.UserName ?? string.Empty,
-                Text = x.Post.Text,
-                PostCreatedAtUtc = x.Post.CreatedAtUtc,
-                LikedAtUtc = x.CreatedAtUtc
-            })
-            .ToListAsync();
+        List<UserLikedPostReadDto> likedPosts = await _userRepository.GetLikedPostsAsync(userId, skip, take);
 
         return ServiceResult<List<UserLikedPostReadDto>>.Success(likedPosts);
     }
@@ -243,4 +165,3 @@ public class UserService : IUserService
         return null;
     }
 }
-

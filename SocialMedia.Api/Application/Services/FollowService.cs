@@ -1,19 +1,18 @@
-using Microsoft.EntityFrameworkCore;
 using SocialMedia.Api.Application.Dtos.Common;
 using SocialMedia.Api.Application.Dtos.Follows;
+using SocialMedia.Api.Application.Repositories.Abstractions;
 using SocialMedia.Api.Application.Services.Abstractions;
 using SocialMedia.Api.Domain.Entities;
-using SocialMedia.Api.Infrastructure.Persistence;
 
 namespace SocialMedia.Api.Application.Services;
 
 public class FollowService : IFollowService
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IFollowRepository _followRepository;
 
-    public FollowService(AppDbContext dbContext)
+    public FollowService(IFollowRepository followRepository)
     {
-        _dbContext = dbContext;
+        _followRepository = followRepository;
     }
 
     public async Task<ServiceResult<MessageReadDto>> FollowAsync(Guid currentUserId, Guid followingUserId)
@@ -23,13 +22,13 @@ public class FollowService : IFollowService
             return ServiceResult<MessageReadDto>.Fail(ServiceErrorType.BadRequest, "Kendini takip edemezsin.");
         }
 
-        bool followingUserExists = await _dbContext.Users.AnyAsync(x => x.Id == followingUserId);
+        bool followingUserExists = await _followRepository.UserExistsAsync(followingUserId);
         if (!followingUserExists)
         {
             return ServiceResult<MessageReadDto>.Fail(ServiceErrorType.NotFound, "Takip edilecek kullanıcı bulunamadı.");
         }
 
-        Follow? existingFollow = await _dbContext.Follows.FindAsync(currentUserId, followingUserId);
+        Follow? existingFollow = await _followRepository.GetByIdAsync(currentUserId, followingUserId);
         if (existingFollow != null)
         {
             return ServiceResult<MessageReadDto>.Success(new MessageReadDto
@@ -38,13 +37,13 @@ public class FollowService : IFollowService
             });
         }
 
-        _dbContext.Follows.Add(new Follow
+        await _followRepository.AddAsync(new Follow
         {
             FollowerId = currentUserId,
             FollowingId = followingUserId
         });
 
-        await _dbContext.SaveChangesAsync();
+        await _followRepository.SaveChangesAsync();
 
         return ServiceResult<MessageReadDto>.Success(new MessageReadDto
         {
@@ -54,7 +53,7 @@ public class FollowService : IFollowService
 
     public async Task<ServiceResult<MessageReadDto>> UnfollowAsync(Guid currentUserId, Guid followingUserId)
     {
-        Follow? existingFollow = await _dbContext.Follows.FindAsync(currentUserId, followingUserId);
+        Follow? existingFollow = await _followRepository.GetByIdAsync(currentUserId, followingUserId);
         if (existingFollow == null)
         {
             return ServiceResult<MessageReadDto>.Success(new MessageReadDto
@@ -63,8 +62,8 @@ public class FollowService : IFollowService
             });
         }
 
-        _dbContext.Follows.Remove(existingFollow);
-        await _dbContext.SaveChangesAsync();
+        _followRepository.Remove(existingFollow);
+        await _followRepository.SaveChangesAsync();
 
         return ServiceResult<MessageReadDto>.Success(new MessageReadDto
         {
@@ -80,27 +79,15 @@ public class FollowService : IFollowService
             return ServiceResult<FollowListReadDto>.Fail(paginationError.Type, paginationError.Message);
         }
 
-        bool userExists = await _dbContext.Users.AnyAsync(x => x.Id == userId);
+        bool userExists = await _followRepository.UserExistsAsync(userId);
         if (!userExists)
         {
             return ServiceResult<FollowListReadDto>.Fail(ServiceErrorType.NotFound, "Kullanıcı bulunamadı.");
         }
 
-        int totalCount = await _dbContext.Follows.CountAsync(x => x.FollowingId == userId);
+        int totalCount = await _followRepository.CountFollowersAsync(userId);
 
-        List<FollowUserReadDto> followers = await _dbContext.Follows
-            .AsNoTracking()
-            .Where(x => x.FollowingId == userId)
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new FollowUserReadDto
-            {
-                UserId = x.FollowerId,
-                UserName = x.Follower.UserName ?? string.Empty,
-                FollowedAtUtc = x.CreatedAtUtc
-            })
-            .ToListAsync();
+        List<FollowUserReadDto> followers = await _followRepository.GetFollowersAsync(userId, skip, take);
 
         return ServiceResult<FollowListReadDto>.Success(new FollowListReadDto
         {
@@ -118,27 +105,15 @@ public class FollowService : IFollowService
             return ServiceResult<FollowListReadDto>.Fail(paginationError.Type, paginationError.Message);
         }
 
-        bool userExists = await _dbContext.Users.AnyAsync(x => x.Id == userId);
+        bool userExists = await _followRepository.UserExistsAsync(userId);
         if (!userExists)
         {
             return ServiceResult<FollowListReadDto>.Fail(ServiceErrorType.NotFound, "Kullanıcı bulunamadı.");
         }
 
-        int totalCount = await _dbContext.Follows.CountAsync(x => x.FollowerId == userId);
+        int totalCount = await _followRepository.CountFollowingAsync(userId);
 
-        List<FollowUserReadDto> following = await _dbContext.Follows
-            .AsNoTracking()
-            .Where(x => x.FollowerId == userId)
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new FollowUserReadDto
-            {
-                UserId = x.FollowingId,
-                UserName = x.Following.UserName ?? string.Empty,
-                FollowedAtUtc = x.CreatedAtUtc
-            })
-            .ToListAsync();
+        List<FollowUserReadDto> following = await _followRepository.GetFollowingAsync(userId, skip, take);
 
         return ServiceResult<FollowListReadDto>.Success(new FollowListReadDto
         {
@@ -163,4 +138,3 @@ public class FollowService : IFollowService
         return null;
     }
 }
-

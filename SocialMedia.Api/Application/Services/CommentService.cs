@@ -1,19 +1,18 @@
-using Microsoft.EntityFrameworkCore;
 using SocialMedia.Api.Application.Dtos.Comments;
 using SocialMedia.Api.Application.Dtos.Common;
+using SocialMedia.Api.Application.Repositories.Abstractions;
 using SocialMedia.Api.Application.Services.Abstractions;
 using SocialMedia.Api.Domain.Entities;
-using SocialMedia.Api.Infrastructure.Persistence;
 
 namespace SocialMedia.Api.Application.Services;
 
 public class CommentService : ICommentService
 {
-    private readonly AppDbContext _dbContext;
+    private readonly ICommentRepository _commentRepository;
 
-    public CommentService(AppDbContext dbContext)
+    public CommentService(ICommentRepository commentRepository)
     {
-        _dbContext = dbContext;
+        _commentRepository = commentRepository;
     }
 
     public async Task<ServiceResult<List<CommentReadDto>>> GetByPostAsync(Guid postId, int skip, int take)
@@ -24,51 +23,20 @@ public class CommentService : ICommentService
             return ServiceResult<List<CommentReadDto>>.Fail(paginationError.Type, paginationError.Message);
         }
 
-        bool postExists = await _dbContext.Posts.AnyAsync(x => x.Id == postId);
+        bool postExists = await _commentRepository.PostExistsAsync(postId);
         if (!postExists)
         {
             return ServiceResult<List<CommentReadDto>>.Fail(ServiceErrorType.NotFound, "Post bulunamadı.");
         }
 
-        List<CommentReadDto> comments = await _dbContext.Comments
-            .AsNoTracking()
-            .Where(x => x.PostId == postId)
-            .OrderBy(x => x.CreatedAtUtc)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new CommentReadDto
-            {
-                Id = x.Id,
-                PostId = x.PostId,
-                AuthorId = x.AuthorId,
-                AuthorUserName = x.Author.UserName ?? string.Empty,
-                Body = x.Body,
-                ParentCommentId = x.ParentCommentId,
-                CreatedAtUtc = x.CreatedAtUtc,
-                ChildrenCount = x.Children.Count
-            })
-            .ToListAsync();
+        List<CommentReadDto> comments = await _commentRepository.GetByPostAsync(postId, skip, take);
 
         return ServiceResult<List<CommentReadDto>>.Success(comments);
     }
 
     public async Task<ServiceResult<CommentReadDto>> GetByIdAsync(Guid commentId)
     {
-        CommentReadDto? comment = await _dbContext.Comments
-            .AsNoTracking()
-            .Where(x => x.Id == commentId)
-            .Select(x => new CommentReadDto
-            {
-                Id = x.Id,
-                PostId = x.PostId,
-                AuthorId = x.AuthorId,
-                AuthorUserName = x.Author.UserName ?? string.Empty,
-                Body = x.Body,
-                ParentCommentId = x.ParentCommentId,
-                CreatedAtUtc = x.CreatedAtUtc,
-                ChildrenCount = x.Children.Count
-            })
-            .FirstOrDefaultAsync();
+        CommentReadDto? comment = await _commentRepository.GetReadByIdAsync(commentId);
 
         if (comment == null)
         {
@@ -86,30 +54,13 @@ public class CommentService : ICommentService
             return ServiceResult<List<CommentReadDto>>.Fail(paginationError.Type, paginationError.Message);
         }
 
-        bool commentExists = await _dbContext.Comments.AnyAsync(x => x.Id == commentId);
+        bool commentExists = await _commentRepository.ExistsAsync(commentId);
         if (!commentExists)
         {
             return ServiceResult<List<CommentReadDto>>.Fail(ServiceErrorType.NotFound, "Yorum bulunamadı.");
         }
 
-        List<CommentReadDto> children = await _dbContext.Comments
-            .AsNoTracking()
-            .Where(x => x.ParentCommentId == commentId)
-            .OrderBy(x => x.CreatedAtUtc)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new CommentReadDto
-            {
-                Id = x.Id,
-                PostId = x.PostId,
-                AuthorId = x.AuthorId,
-                AuthorUserName = x.Author.UserName ?? string.Empty,
-                Body = x.Body,
-                ParentCommentId = x.ParentCommentId,
-                CreatedAtUtc = x.CreatedAtUtc,
-                ChildrenCount = x.Children.Count
-            })
-            .ToListAsync();
+        List<CommentReadDto> children = await _commentRepository.GetChildrenAsync(commentId, skip, take);
 
         return ServiceResult<List<CommentReadDto>>.Success(children);
     }
@@ -132,7 +83,7 @@ public class CommentService : ICommentService
             return ServiceResult<CreatedCommentReadDto>.Fail(ServiceErrorType.BadRequest, "Yorum en fazla 2000 karakter olabilir.");
         }
 
-        bool postExists = await _dbContext.Posts.AnyAsync(x => x.Id == postId);
+        bool postExists = await _commentRepository.PostExistsAsync(postId);
         if (!postExists)
         {
             return ServiceResult<CreatedCommentReadDto>.Fail(ServiceErrorType.NotFound, "Post bulunamadı.");
@@ -140,9 +91,7 @@ public class CommentService : ICommentService
 
         if (request.ParentCommentId.HasValue)
         {
-            Comment? parentComment = await _dbContext.Comments
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == request.ParentCommentId.Value);
+            Comment? parentComment = await _commentRepository.GetParentCommentAsync(request.ParentCommentId.Value);
 
             if (parentComment == null)
             {
@@ -164,8 +113,8 @@ public class CommentService : ICommentService
             ParentCommentId = request.ParentCommentId
         };
 
-        _dbContext.Comments.Add(comment);
-        await _dbContext.SaveChangesAsync();
+        await _commentRepository.AddAsync(comment);
+        await _commentRepository.SaveChangesAsync();
 
         return ServiceResult<CreatedCommentReadDto>.Success(new CreatedCommentReadDto
         {
@@ -176,7 +125,7 @@ public class CommentService : ICommentService
 
     public async Task<ServiceResult<MessageReadDto>> DeleteAsync(Guid currentUserId, Guid commentId)
     {
-        Comment? comment = await _dbContext.Comments.FirstOrDefaultAsync(x => x.Id == commentId);
+        Comment? comment = await _commentRepository.GetByIdAsync(commentId);
         if (comment == null)
         {
             return ServiceResult<MessageReadDto>.Fail(ServiceErrorType.NotFound, "Yorum bulunamadı.");
@@ -187,8 +136,8 @@ public class CommentService : ICommentService
             return ServiceResult<MessageReadDto>.Fail(ServiceErrorType.Forbidden, "Forbidden");
         }
 
-        _dbContext.Comments.Remove(comment);
-        await _dbContext.SaveChangesAsync();
+        _commentRepository.Remove(comment);
+        await _commentRepository.SaveChangesAsync();
 
         return ServiceResult<MessageReadDto>.Success(new MessageReadDto
         {
@@ -214,7 +163,7 @@ public class CommentService : ICommentService
             return ServiceResult<MessageReadDto>.Fail(ServiceErrorType.BadRequest, "Yorum en fazla 2000 karakter olabilir.");
         }
 
-        Comment? comment = await _dbContext.Comments.FirstOrDefaultAsync(x => x.Id == commentId);
+        Comment? comment = await _commentRepository.GetByIdAsync(commentId);
         if (comment == null)
         {
             return ServiceResult<MessageReadDto>.Fail(ServiceErrorType.NotFound, "Yorum bulunamadı.");
@@ -226,7 +175,7 @@ public class CommentService : ICommentService
         }
 
         comment.Body = body;
-        await _dbContext.SaveChangesAsync();
+        await _commentRepository.SaveChangesAsync();
 
         return ServiceResult<MessageReadDto>.Success(new MessageReadDto
         {
@@ -249,4 +198,3 @@ public class CommentService : ICommentService
         return null;
     }
 }
-

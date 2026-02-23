@@ -1,53 +1,48 @@
-## Step 08 — Service Layer Refactor
+## Step 09 — Repository Layer Refactor
 
-Bu stepte controller içindeki iş kuralları servis katmanına taşındı.
-Controller'lar artık ağırlıklı olarak HTTP/route/auth ve response mapping yapıyor.
+Bu stepte servislerin doğrudan `DbContext` bağımlılığı kaldırıldı.
+Veri erişimi repository katmanına taşındı ve servisler artık repository arayüzleri üzerinden çalışıyor.
 
 ## Bu stepte yapılanlar
 
-- Yeni branch: `step/08-service-layer`
-- Service altyapısı eklendi:
-  - `ServiceResult<T>`
-  - `ServiceError` + `ServiceErrorType`
-  - `ServiceErrorExtensions` (`ServiceError -> IActionResult` mapping)
-- Servis arayüzleri eklendi:
-  - `IPostService`
-  - `ICommentService`
-  - `IFollowService`
-  - `IUserService`
-  - `ITagService`
-- Servis implementasyonları eklendi:
-  - `PostService`
-  - `CommentService`
-  - `FollowService`
-  - `UserService`
-  - `TagService`
-- `Program.cs` içine DI kayıtları eklendi.
-- `Posts/Comments/Follows/Users/Tags` controllerları servis kullanacak şekilde sadeleştirildi.
+- Yeni branch: `step/09-Repository-Layer-Refactor`
+- Repository arayüzleri eklendi:
+  - `IPostRepository`
+  - `ICommentRepository`
+  - `IFollowRepository`
+  - `IUserRepository`
+  - `ITagRepository`
+- EF Core repository implementasyonları eklendi:
+  - `PostRepository`
+  - `CommentRepository`
+  - `FollowRepository`
+  - `UserRepository`
+  - `TagRepository`
+- `Post/Comment/Follow/User/Tag` servisleri repository kullanacak şekilde refactor edildi.
+- `Program.cs` içine repository DI kayıtları eklendi.
 
 ## Yeni dosyalar
 
-- `SocialMedia.Api/Application/Services/ServiceResult.cs`
-- `SocialMedia.Api/Application/Services/ServiceErrorExtensions.cs`
-- `SocialMedia.Api/Application/Services/Abstractions/IPostService.cs`
-- `SocialMedia.Api/Application/Services/Abstractions/ICommentService.cs`
-- `SocialMedia.Api/Application/Services/Abstractions/IFollowService.cs`
-- `SocialMedia.Api/Application/Services/Abstractions/IUserService.cs`
-- `SocialMedia.Api/Application/Services/Abstractions/ITagService.cs`
+- `SocialMedia.Api/Application/Repositories/Abstractions/IPostRepository.cs`
+- `SocialMedia.Api/Application/Repositories/Abstractions/ICommentRepository.cs`
+- `SocialMedia.Api/Application/Repositories/Abstractions/IFollowRepository.cs`
+- `SocialMedia.Api/Application/Repositories/Abstractions/IUserRepository.cs`
+- `SocialMedia.Api/Application/Repositories/Abstractions/ITagRepository.cs`
+- `SocialMedia.Api/Infrastructure/Persistence/Repositories/PostRepository.cs`
+- `SocialMedia.Api/Infrastructure/Persistence/Repositories/CommentRepository.cs`
+- `SocialMedia.Api/Infrastructure/Persistence/Repositories/FollowRepository.cs`
+- `SocialMedia.Api/Infrastructure/Persistence/Repositories/UserRepository.cs`
+- `SocialMedia.Api/Infrastructure/Persistence/Repositories/TagRepository.cs`
+
+## Güncellenen dosyalar
+
 - `SocialMedia.Api/Application/Services/PostService.cs`
 - `SocialMedia.Api/Application/Services/CommentService.cs`
 - `SocialMedia.Api/Application/Services/FollowService.cs`
 - `SocialMedia.Api/Application/Services/UserService.cs`
 - `SocialMedia.Api/Application/Services/TagService.cs`
-
-## Güncellenen dosyalar
-
 - `SocialMedia.Api/Program.cs`
-- `SocialMedia.Api/Controllers/PostsController.cs`
-- `SocialMedia.Api/Controllers/CommentsController.cs`
-- `SocialMedia.Api/Controllers/FollowsController.cs`
-- `SocialMedia.Api/Controllers/UsersController.cs`
-- `SocialMedia.Api/Controllers/TagsController.cs`
+- `README.md`
 
 ## Çalıştırma
 
@@ -67,5 +62,5 @@ dotnet build SocialMedia.sln
 
 ```bash
 git add .
-git commit -m "step 08: add service layer and refactor social controllers"
+git commit -m "step/09-Repository-Layer-Refactor"
 ```

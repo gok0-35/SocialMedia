@@ -1,11 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using SocialMedia.Api.Application.Dtos.Common;
-using SocialMedia.Api.Application.Dtos.Follows;
-using SocialMedia.Api.Domain.Entities;
-using SocialMedia.Api.Infrastructure.Persistence;
+using SocialMedia.Api.Application.Services;
+using SocialMedia.Api.Application.Services.Abstractions;
 
 namespace SocialMedia.Api.Controllers;
 
@@ -13,11 +10,11 @@ namespace SocialMedia.Api.Controllers;
 [Route("api/follows")]
 public class FollowsController : ControllerBase
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IFollowService _followService;
 
-    public FollowsController(AppDbContext dbContext)
+    public FollowsController(IFollowService followService)
     {
-        _dbContext = dbContext;
+        _followService = followService;
     }
 
     [Authorize]
@@ -29,38 +26,13 @@ public class FollowsController : ControllerBase
             return Unauthorized("Geçersiz kullanıcı token'ı.");
         }
 
-        if (followingUserId == currentUserId)
+        var result = await _followService.FollowAsync(currentUserId, followingUserId);
+        if (!result.IsSuccess)
         {
-            return BadRequest("Kendini takip edemezsin.");
+            return this.ToActionResult(result.Error!);
         }
 
-        bool followingUserExists = await _dbContext.Users.AnyAsync(x => x.Id == followingUserId);
-        if (!followingUserExists)
-        {
-            return NotFound("Takip edilecek kullanıcı bulunamadı.");
-        }
-
-        Follow? existingFollow = await _dbContext.Follows.FindAsync(currentUserId, followingUserId);
-        if (existingFollow != null)
-        {
-            return Ok(new MessageReadDto
-            {
-                Message = "Kullanıcı zaten takip ediliyor."
-            });
-        }
-
-        _dbContext.Follows.Add(new Follow
-        {
-            FollowerId = currentUserId,
-            FollowingId = followingUserId
-        });
-
-        await _dbContext.SaveChangesAsync();
-
-        return Ok(new MessageReadDto
-        {
-            Message = "Kullanıcı takip edildi."
-        });
+        return Ok(result.Data);
     }
 
     [Authorize]
@@ -72,117 +44,37 @@ public class FollowsController : ControllerBase
             return Unauthorized("Geçersiz kullanıcı token'ı.");
         }
 
-        Follow? existingFollow = await _dbContext.Follows.FindAsync(currentUserId, followingUserId);
-        if (existingFollow == null)
+        var result = await _followService.UnfollowAsync(currentUserId, followingUserId);
+        if (!result.IsSuccess)
         {
-            return Ok(new MessageReadDto
-            {
-                Message = "Kullanıcı zaten takip edilmiyor."
-            });
+            return this.ToActionResult(result.Error!);
         }
 
-        _dbContext.Follows.Remove(existingFollow);
-        await _dbContext.SaveChangesAsync();
-
-        return Ok(new MessageReadDto
-        {
-            Message = "Takip bırakıldı."
-        });
+        return Ok(result.Data);
     }
 
     [HttpGet("{userId:guid}/followers")]
     public async Task<IActionResult> GetFollowers([FromRoute] Guid userId, [FromQuery] int skip = 0, [FromQuery] int take = 20)
     {
-        if (!TryValidatePagination(skip, take, out IActionResult? errorResult))
+        var result = await _followService.GetFollowersAsync(userId, skip, take);
+        if (!result.IsSuccess)
         {
-            return errorResult!;
+            return this.ToActionResult(result.Error!);
         }
 
-        bool userExists = await _dbContext.Users.AnyAsync(x => x.Id == userId);
-        if (!userExists)
-        {
-            return NotFound("Kullanıcı bulunamadı.");
-        }
-
-        int totalCount = await _dbContext.Follows.CountAsync(x => x.FollowingId == userId);
-
-        List<FollowUserReadDto> followers = await _dbContext.Follows
-            .AsNoTracking()
-            .Where(x => x.FollowingId == userId)
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new FollowUserReadDto
-            {
-                UserId = x.FollowerId,
-                UserName = x.Follower.UserName ?? string.Empty,
-                FollowedAtUtc = x.CreatedAtUtc
-            })
-            .ToListAsync();
-
-        return Ok(new FollowListReadDto
-        {
-            UserId = userId,
-            TotalCount = totalCount,
-            Items = followers
-        });
+        return Ok(result.Data);
     }
 
     [HttpGet("{userId:guid}/following")]
     public async Task<IActionResult> GetFollowing([FromRoute] Guid userId, [FromQuery] int skip = 0, [FromQuery] int take = 20)
     {
-        if (!TryValidatePagination(skip, take, out IActionResult? errorResult))
+        var result = await _followService.GetFollowingAsync(userId, skip, take);
+        if (!result.IsSuccess)
         {
-            return errorResult!;
+            return this.ToActionResult(result.Error!);
         }
 
-        bool userExists = await _dbContext.Users.AnyAsync(x => x.Id == userId);
-        if (!userExists)
-        {
-            return NotFound("Kullanıcı bulunamadı.");
-        }
-
-        int totalCount = await _dbContext.Follows.CountAsync(x => x.FollowerId == userId);
-
-        List<FollowUserReadDto> following = await _dbContext.Follows
-            .AsNoTracking()
-            .Where(x => x.FollowerId == userId)
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .Skip(skip)
-            .Take(take)
-            .Select(x => new FollowUserReadDto
-            {
-                UserId = x.FollowingId,
-                UserName = x.Following.UserName ?? string.Empty,
-                FollowedAtUtc = x.CreatedAtUtc
-            })
-            .ToListAsync();
-
-        return Ok(new FollowListReadDto
-        {
-            UserId = userId,
-            TotalCount = totalCount,
-            Items = following
-        });
-    }
-
-    private static bool TryValidatePagination(int skip, int take, out IActionResult? errorResult)
-    {
-        errorResult = null;
-
-        if (skip < 0)
-        {
-            errorResult = new BadRequestObjectResult("skip 0 veya daha büyük olmalı.");
-            return false;
-        }
-
-        if (take <= 0 || take > 100)
-        {
-            errorResult = new BadRequestObjectResult("take 1 ile 100 arasında olmalı.");
-            return false;
-        }
-
-        return true;
+        return Ok(result.Data);
     }
 
     private static bool TryGetCurrentUserId(ClaimsPrincipal user, out Guid userId)

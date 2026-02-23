@@ -1,51 +1,60 @@
-## Step 07 — DTO Refactor
+## Step 08 — Service Layer Refactor
 
-Bu stepte controller içindeki `Request/Response` sınıfları dışarı taşındı ve
-`ReadDto / WriteDto` ayrımıyla tek bir DTO katmanında toplandı.
-Amaç: controller dosyalarını sadeleştirmek ve API sözleşmesini merkezi dosyalardan yönetmek.
+Bu stepte controller içindeki iş kuralları servis katmanına taşındı.
+Controller'lar artık ağırlıklı olarak HTTP/route/auth ve response mapping yapıyor.
 
 ## Bu stepte yapılanlar
 
-- Yeni branch: `step/07-dto-refactor`
-- DTO klasörü eklendi: `SocialMedia.Api/Application/Dtos`
-- Controller içindeki tüm nested DTO sınıfları kaldırıldı.
-- DTO adları standardize edildi:
-  - Girdi modelleri: `*WriteDto`
-  - Çıktı modelleri: `*ReadDto`
-- Anonim response dönen yerler typed DTO ile güncellendi (`MessageReadDto`, `FollowListReadDto`, `PostLikesReadDto`, vb.)
-- Build doğrulaması yapıldı (`dotnet build` başarılı)
+- Yeni branch: `step/08-service-layer`
+- Service altyapısı eklendi:
+  - `ServiceResult<T>`
+  - `ServiceError` + `ServiceErrorType`
+  - `ServiceErrorExtensions` (`ServiceError -> IActionResult` mapping)
+- Servis arayüzleri eklendi:
+  - `IPostService`
+  - `ICommentService`
+  - `IFollowService`
+  - `IUserService`
+  - `ITagService`
+- Servis implementasyonları eklendi:
+  - `PostService`
+  - `CommentService`
+  - `FollowService`
+  - `UserService`
+  - `TagService`
+- `Program.cs` içine DI kayıtları eklendi.
+- `Posts/Comments/Follows/Users/Tags` controllerları servis kullanacak şekilde sadeleştirildi.
 
-## Eklenen DTO dosyaları
+## Yeni dosyalar
 
-- `SocialMedia.Api/Application/Dtos/Auth/AuthReadDtos.cs`
-- `SocialMedia.Api/Application/Dtos/Auth/AuthWriteDtos.cs`
-- `SocialMedia.Api/Application/Dtos/Comments/CommentReadDtos.cs`
-- `SocialMedia.Api/Application/Dtos/Comments/CommentWriteDtos.cs`
-- `SocialMedia.Api/Application/Dtos/Common/MessageReadDto.cs`
-- `SocialMedia.Api/Application/Dtos/Follows/FollowReadDtos.cs`
-- `SocialMedia.Api/Application/Dtos/Me/MeReadDto.cs`
-- `SocialMedia.Api/Application/Dtos/Posts/PostReadDtos.cs`
-- `SocialMedia.Api/Application/Dtos/Posts/PostWriteDtos.cs`
-- `SocialMedia.Api/Application/Dtos/Tags/TagReadDtos.cs`
-- `SocialMedia.Api/Application/Dtos/Users/UserReadDtos.cs`
-- `SocialMedia.Api/Application/Dtos/Users/UserWriteDtos.cs`
+- `SocialMedia.Api/Application/Services/ServiceResult.cs`
+- `SocialMedia.Api/Application/Services/ServiceErrorExtensions.cs`
+- `SocialMedia.Api/Application/Services/Abstractions/IPostService.cs`
+- `SocialMedia.Api/Application/Services/Abstractions/ICommentService.cs`
+- `SocialMedia.Api/Application/Services/Abstractions/IFollowService.cs`
+- `SocialMedia.Api/Application/Services/Abstractions/IUserService.cs`
+- `SocialMedia.Api/Application/Services/Abstractions/ITagService.cs`
+- `SocialMedia.Api/Application/Services/PostService.cs`
+- `SocialMedia.Api/Application/Services/CommentService.cs`
+- `SocialMedia.Api/Application/Services/FollowService.cs`
+- `SocialMedia.Api/Application/Services/UserService.cs`
+- `SocialMedia.Api/Application/Services/TagService.cs`
 
-## Güncellenen controllerlar
+## Güncellenen dosyalar
 
-- `SocialMedia.Api/Controllers/AuthController.cs`
+- `SocialMedia.Api/Program.cs`
 - `SocialMedia.Api/Controllers/PostsController.cs`
 - `SocialMedia.Api/Controllers/CommentsController.cs`
 - `SocialMedia.Api/Controllers/FollowsController.cs`
 - `SocialMedia.Api/Controllers/UsersController.cs`
 - `SocialMedia.Api/Controllers/TagsController.cs`
-- `SocialMedia.Api/Controllers/MeController.cs`
 
 ## Çalıştırma
 
 ```bash
 docker compose up -d
 cd SocialMedia.Api
-dotnet watch run --urls "http://localhost:5000"
+dotnet watch
 ```
 
 ## Build kontrolü
@@ -58,5 +67,5 @@ dotnet build SocialMedia.sln
 
 ```bash
 git add .
-git commit -m "step 07: split read/write dtos and refactor controllers"
+git commit -m "step 08: add service layer and refactor social controllers"
 ```
